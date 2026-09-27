@@ -1,0 +1,18 @@
+[Unit]
+Description=eBay Listing Watcher Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Edit these two paths to match where you cloned the project and your venv:
+WorkingDirectory=/home/YOUR_USER/ebay-bot
+ExecStart=/home/YOUR_USER/ebay-bot/venv/bin/python /home/YOUR_USER/ebay-bot/main.py
+EnvironmentFile=/home/YOUR_USER/ebay-bot/.env
+Restart=on-failure
+RestartSec=15
+# Run as a normal (non-root) user:
+User=YOUR_USER
+
+[Install]
+WantedBy=multi-user.target

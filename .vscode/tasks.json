@@ -1,0 +1,36 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Install (editable + dev deps)",
+            "type": "shell",
+            "command": "pip install -e \".[dev]\"",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run tests",
+            "type": "shell",
+            "command": "pytest -v",
+            "group": { "kind": "test", "isDefault": true },
+            "problemMatcher": []
+        },
+        {
+            "label": "Format (black)",
+            "type": "shell",
+            "command": "black src tests",
+            "problemMatcher": []
+        },
+        {
+            "label": "Lint (ruff)",
+            "type": "shell",
+            "command": "ruff check src tests",
+            "problemMatcher": []
+        },
+        {
+            "label": "Run bot",
+            "type": "shell",
+            "command": "python -m ebay_bot",
+            "problemMatcher": []
+        }
+    ]
+}

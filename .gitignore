@@ -1,0 +1,21 @@
+# Environments
+venv/
+.venv/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Secrets and runtime data - never commit these
+.env*
+!.env.example
+*.db
+*.log

@@ -1,0 +1,122 @@
+"""Verifies the polling/dedup/notification logic using fake eBay data and
+mocked Telegram calls - no real network access required."""
+
+from unittest.mock import patch
+
+import pytest
+
+from ebay_bot.commands import BotState
+from ebay_bot.config import AppConfig, Watch
+from ebay_bot.main import poll_ebay_once
+from ebay_bot.storage import SeenStore
+
+PASS_1_ITEMS = [
+    {
+        "itemId": "v1|100001|0",
+        "title": "Beelink Mini PC Ryzen 7 16GB RAM 512GB SSD",
+        "price": {"value": "219.99", "currency": "USD"},
+        "buyingOptions": ["FIXED_PRICE"],
+        "itemWebUrl": "https://www.ebay.com/itm/100001",
+    },
+    {
+        "itemId": "v1|100002|0",
+        "title": "Intel NUC 11 Mini PC i5",
+        "price": {"value": "180.00", "currency": "USD"},
+        "buyingOptions": ["AUCTION"],
+        "itemWebUrl": "https://www.ebay.com/itm/100002",
+    },
+]
+
+NEW_ITEM = {
+    "itemId": "v1|100003|0",
+    "title": "HP EliteDesk Mini PC i7 32GB RAM",
+    "price": {"value": "275.50", "currency": "USD"},
+    "buyingOptions": ["FIXED_PRICE"],
+    "itemWebUrl": "https://www.ebay.com/itm/100003",
+}
+
+
+class FakeEbayClient:
+    """Returns a scripted sequence of responses, one per call to search_watch."""
+
+    def __init__(self, responses):
+        self._responses = responses
+        self.calls = 0
+
+    def search_watch(self, watch):
+        response = self._responses[min(self.calls, len(self._responses) - 1)]
+        self.calls += 1
+        return response
+
+
+@pytest.fixture
+def state(tmp_path):
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("poll_interval_seconds: 60\nwatches: []\n")
+    config = AppConfig(
+        poll_interval_seconds=60,
+        watches=[Watch(name="Mini PC deals (test)", keywords="mini pc")],
+        path=config_path,
+    )
+    return BotState(config=config)
+
+
+@pytest.fixture
+def store(tmp_path):
+    s = SeenStore(path=str(tmp_path / "seen.db"))
+    yield s
+    s.close()
+
+
+def test_baseline_pass_sends_no_notifications(state, store):
+    client = FakeEbayClient([PASS_1_ITEMS])
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=True)
+    mock_notify.assert_not_called()
+
+
+def test_new_listing_triggers_exactly_one_notification(state, store):
+    client = FakeEbayClient([PASS_1_ITEMS, PASS_1_ITEMS + [NEW_ITEM]])
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=True)
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+
+    mock_notify.assert_called_once()
+    called_item = mock_notify.call_args[0][2]
+    assert called_item["itemId"] == "v1|100003|0"
+
+
+def test_repeat_poll_with_nothing_new_sends_no_notifications(state, store):
+    client = FakeEbayClient([PASS_1_ITEMS, PASS_1_ITEMS])
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=True)
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+    mock_notify.assert_not_called()
+
+
+def test_ebay_api_error_for_one_watch_does_not_block_others(tmp_path, store):
+    from ebay_bot.ebay_client import EbayApiError
+
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("poll_interval_seconds: 60\nwatches: []\n")
+    config = AppConfig(
+        poll_interval_seconds=60,
+        watches=[
+            Watch(name="Broken watch", keywords="x"),
+            Watch(name="Working watch", keywords="mini pc"),
+        ],
+        path=config_path,
+    )
+    state = BotState(config=config)
+
+    class FlakyClient:
+        def search_watch(self, watch):
+            if watch.name == "Broken watch":
+                raise EbayApiError("simulated failure")
+            return [NEW_ITEM]
+
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(FlakyClient(), store, state, "tok", "chat", first_pass=False)
+
+    # the broken watch's failure shouldn't stop the working watch from notifying
+    mock_notify.assert_called_once()

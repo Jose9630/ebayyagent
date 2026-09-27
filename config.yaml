@@ -1,0 +1,22 @@
+poll_interval_seconds: 60
+watches:
+- name: Mini PC Listings
+  keywords: ''
+  category_id: '179'
+  brands:
+  - Acemagic
+  - Bosgame
+  - Beelink
+  - Geekom
+  - GMKtec
+  - Aoostar
+  - Minisforum
+  - Kamrui
+  - TRIGKEY
+  - Origimagic
+  - Getorli
+  min_price: 10
+  max_price: 20000
+  currency: USD
+  listing_type: BOTH
+  site: EBAY_US
