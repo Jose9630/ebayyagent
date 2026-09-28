@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from ebay_bot.commands import BotState
+from ebay_bot.commands import BotState, handle_update
 from ebay_bot.config import AppConfig, Watch
 from ebay_bot.main import poll_ebay_once
 from ebay_bot.storage import SeenStore
@@ -84,6 +84,70 @@ def test_new_listing_triggers_exactly_one_notification(state, store):
     mock_notify.assert_called_once()
     called_item = mock_notify.call_args[0][2]
     assert called_item["itemId"] == "v1|100003|0"
+
+
+def test_added_watch_catches_up_silently_then_notifies_new_listings(state, store):
+    state.config.watches.clear()
+    with patch("ebay_bot.commands.send_message"):
+        handle_update(
+            {
+                "message": {
+                    "chat": {"id": 123},
+                    "text": "/addwatch New watch | mini pc | 50 | 300 | BOTH",
+                }
+            },
+            state,
+            "tok",
+            "123",
+        )
+
+    client = FakeEbayClient([PASS_1_ITEMS, PASS_1_ITEMS + [NEW_ITEM]])
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+        mock_notify.assert_not_called()
+        assert not state.pending_baseline_watch_names
+
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+
+    mock_notify.assert_called_once()
+    assert mock_notify.call_args[0][2]["itemId"] == NEW_ITEM["itemId"]
+
+
+def test_added_watch_retries_silent_baseline_after_api_error(state, store):
+    state.config.watches.clear()
+    with patch("ebay_bot.commands.send_message"):
+        handle_update(
+            {
+                "message": {
+                    "chat": {"id": 123},
+                    "text": "/addwatch New watch | mini pc | 50 | 300 | BOTH",
+                }
+            },
+            state,
+            "tok",
+            "123",
+        )
+
+    class FailingOnceClient:
+        calls = 0
+
+        def search_watch(self, watch):
+            self.calls += 1
+            if self.calls == 1:
+                from ebay_bot.ebay_client import EbayApiError
+
+                raise EbayApiError("simulated failure")
+            return PASS_1_ITEMS
+
+    client = FailingOnceClient()
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+        assert state.pending_baseline_watch_names == {"New watch"}
+
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+
+    mock_notify.assert_not_called()
+    assert not state.pending_baseline_watch_names
 
 
 def test_repeat_poll_with_nothing_new_sends_no_notifications(state, store):

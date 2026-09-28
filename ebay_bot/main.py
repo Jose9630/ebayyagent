@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import logging
 import os
-import signal
 import shutil
+import signal
 import time
 from pathlib import Path
 from types import FrameType
@@ -43,7 +43,9 @@ def poll_ebay_once(
     chat_id: str | None,
     first_pass: bool,
 ) -> None:
+    completed_baselines: set[str] = set()
     for watch in state.watches:
+        baseline_watch = first_pass or watch.name in state.pending_baseline_watch_names
         try:
             items = client.search_watch(watch)
         except EbayApiError as e:
@@ -56,10 +58,13 @@ def poll_ebay_once(
                 continue
             if store.is_new(watch.name, item_id):
                 store.mark_seen(watch.name, item_id)
-                if first_pass:
-                    continue  # baseline: record what's already listed, don't notify
+                if baseline_watch:
+                    continue
                 logger.info(f"[{watch.name}] New listing: {item.get('title')}")
                 notify_telegram(bot_token, chat_id, item, watch.name)
+        if watch.name in state.pending_baseline_watch_names:
+            completed_baselines.add(watch.name)
+    state.pending_baseline_watch_names.difference_update(completed_baselines)
 
 
 def _load_config() -> AppConfig:

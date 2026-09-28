@@ -28,6 +28,7 @@ class BotState:
     config: AppConfig
     paused: bool = False
     last_poll_time: float | None = None
+    pending_baseline_watch_names: set[str] = field(default_factory=set)
     start_time: float = field(default_factory=time.time)
 
     @property
@@ -206,6 +207,7 @@ def handle_update(update: dict, state: BotState, bot_token: str, allowed_chat_id
             )
             state.config.watches.append(new_watch)
             state.config.save_watches()
+            state.pending_baseline_watch_names.add(new_watch.name)
             send_message(bot_token, chat_id, f"Added watch:\n{_format_watch(new_watch)}")
         except Exception as e:
             send_message(

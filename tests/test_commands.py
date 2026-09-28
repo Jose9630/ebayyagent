@@ -98,6 +98,7 @@ def test_addwatch_adds_and_persists(state):
     assert w.min_price == 50.0
     assert w.max_price == 300.0
     assert w.listing_type == "BOTH"
+    assert "MiniPC" in state.pending_baseline_watch_names
 
     reloaded = AppConfig.load(state.config.path)
     assert len(reloaded.watches) == 1
