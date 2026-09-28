@@ -23,9 +23,8 @@ ebay-bot = "ebay_bot.main:main"
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["ebay_bot*"]
+[tool.setuptools]
+packages = ["ebay_bot"]
 
 [tool.black]
 line-length = 100
@@ -40,3 +39,4 @@ select = ["E", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
