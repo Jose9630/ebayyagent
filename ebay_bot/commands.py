@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 import requests
 
 from .config import AppConfig, Watch
+from .telegram_errors import describe_telegram_error
 
 logger = logging.getLogger("ebay_bot")
 
@@ -52,7 +53,7 @@ def get_updates(bot_token: str, offset: int | None = None, timeout: int = 5):
         resp.raise_for_status()
         data = resp.json()
     except requests.RequestException as e:
-        logger.warning(f"[telegram] failed to fetch updates: {e}")
+        logger.warning("[telegram] failed to fetch updates: %s", describe_telegram_error(e))
         return [], offset
 
     results = data.get("result", [])
@@ -71,7 +72,7 @@ def send_message(bot_token: str, chat_id: str, text: str) -> None:
         )
         resp.raise_for_status()
     except requests.RequestException as e:
-        logger.warning(f"[telegram] failed to send message: {e}")
+        logger.warning("[telegram] failed to send message: %s", describe_telegram_error(e))
 
 
 def _format_watch(w: Watch) -> str:
@@ -93,6 +94,7 @@ def _format_watch(w: Watch) -> str:
 HELP_TEXT = (
     "<b>eBay Watcher Bot</b>\n"
     "/status — show current status\n"
+    "/interval [seconds] — show or change the polling interval\n"
     "/pause — pause polling\n"
     "/resume — resume polling\n"
     "/listwatches — show active watches\n"
@@ -144,6 +146,26 @@ def handle_update(update: dict, state: BotState, bot_token: str, allowed_chat_id
             f"Poll interval: {state.poll_interval}s\n"
             f"Last poll: {last_poll}",
         )
+
+    elif command == "/interval":
+        if not arg:
+            send_message(bot_token, chat_id, f"Polling interval: {state.poll_interval}s")
+            return
+        try:
+            interval = int(arg)
+            if interval <= 0:
+                raise ValueError
+        except ValueError:
+            send_message(
+                bot_token,
+                chat_id,
+                "Usage: /interval [positive whole number of seconds]",
+            )
+            return
+
+        state.config.poll_interval_seconds = interval
+        state.config.save()
+        send_message(bot_token, chat_id, f"Polling interval set to {interval}s.")
 
     elif command == "/pause":
         state.paused = True

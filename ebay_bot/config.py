@@ -97,12 +97,16 @@ class AppConfig:
             path=path,
         )
 
-    def save_watches(self) -> None:
+    def save(self) -> None:
         with self.path.open() as f:
             raw = yaml.safe_load(f) or {}
+        raw["poll_interval_seconds"] = self.poll_interval_seconds
         raw["watches"] = [w.to_dict() for w in self.watches]
         with self.path.open("w") as f:
             yaml.safe_dump(raw, f, sort_keys=False)
+
+    def save_watches(self) -> None:
+        self.save()
 
 
 @dataclass

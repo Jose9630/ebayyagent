@@ -1,8 +1,10 @@
-from unittest.mock import patch
+import logging
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
-from ebay_bot.commands import BotState, handle_update
+from ebay_bot.commands import BotState, handle_update, send_message
 from ebay_bot.config import AppConfig, Watch
 
 ALLOWED_CHAT = "111111"
@@ -20,6 +22,22 @@ def state(tmp_path):
     return BotState(config=config)
 
 
+def test_send_message_logs_api_description_without_bot_token(caplog):
+    response = MagicMock()
+    response.status_code = 400
+    response.json.return_value = {"description": "Bad Request: chat not found"}
+    response.raise_for_status.side_effect = requests.HTTPError(response=response)
+
+    with (
+        patch("ebay_bot.commands.requests.post", return_value=response),
+        caplog.at_level(logging.WARNING, logger="ebay_bot.commands"),
+    ):
+        send_message("secret-bot-token", "chat-id", "hello")
+
+    assert "Bad Request: chat not found" in caplog.text
+    assert "secret-bot-token" not in caplog.text
+
+
 def test_unauthorized_chat_is_ignored(state):
     with patch("ebay_bot.commands.send_message") as mock_send:
         handle_update(make_update("/status", chat_id="999999"), state, "tok", ALLOWED_CHAT)
@@ -30,6 +48,31 @@ def test_status_responds_to_authorized_chat(state):
     with patch("ebay_bot.commands.send_message") as mock_send:
         handle_update(make_update("/status"), state, "tok", ALLOWED_CHAT)
     mock_send.assert_called_once()
+
+
+def test_interval_reports_current_value(state):
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/interval"), state, "tok", ALLOWED_CHAT)
+
+    assert "60s" in mock_send.call_args[0][2]
+
+
+def test_interval_updates_and_persists_value(state):
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/interval 120"), state, "tok", ALLOWED_CHAT)
+
+    assert state.poll_interval == 120
+    assert AppConfig.load(state.config.path).poll_interval_seconds == 120
+    assert "120s" in mock_send.call_args[0][2]
+
+
+@pytest.mark.parametrize("argument", ["0", "-1", "fast", "60 seconds"])
+def test_interval_rejects_invalid_values(state, argument):
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update(f"/interval {argument}"), state, "tok", ALLOWED_CHAT)
+
+    assert state.poll_interval == 60
+    assert "Usage" in mock_send.call_args[0][2]
 
 
 def test_pause_and_resume(state):
