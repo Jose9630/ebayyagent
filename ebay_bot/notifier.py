@@ -23,7 +23,11 @@ def _format_price(item: dict) -> str:
 
 
 def notify_telegram(
-    bot_token: str | None, chat_id: str | None, item: dict, watch_name: str
+    bot_token: str | None,
+    chat_id: str | None,
+    item: dict,
+    watch_name: str,
+    price_drop: bool = False,
 ) -> None:
     """Sends a message via the Telegram Bot API. Failures are logged, never raised,
     so a Telegram outage doesn't crash the polling loop."""
@@ -33,9 +37,10 @@ def notify_telegram(
     title = item.get("title", "New listing")
     link = item.get("itemWebUrl", "")
     buying_options = ", ".join(item.get("buyingOptions", []))
+    heading = "📉 Price drop" if price_drop else "🆕"
 
     text = (
-        f"🆕 <b>{html.escape(watch_name)}</b>\n"
+        f"{heading} <b>{html.escape(watch_name)}</b>\n"
         f"{html.escape(title)}\n"
         f"💰 {html.escape(_format_price(item))}  |  {html.escape(buying_options)}\n"
         f'<a href="{html.escape(link)}">View on eBay</a>'

@@ -158,6 +158,68 @@ def test_repeat_poll_with_nothing_new_sends_no_notifications(state, store):
     mock_notify.assert_not_called()
 
 
+def test_price_drop_updates_stored_price_and_notifies(state, store):
+    cheaper_item = {
+        **PASS_1_ITEMS[0],
+        "price": {"value": "199.99", "currency": "USD"},
+    }
+    client = FakeEbayClient([[PASS_1_ITEMS[0]], [cheaper_item], [cheaper_item]])
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=True)
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+
+    mock_notify.assert_called_once()
+    assert mock_notify.call_args.kwargs["price_drop"] is True
+    assert mock_notify.call_args.args[2]["price"]["value"] == "199.99"
+    assert store.get_last_price(state.watches[0].name, PASS_1_ITEMS[0]["itemId"]) == (
+        "199.99",
+        "USD",
+    )
+
+
+def test_price_increase_updates_baseline_without_notifying(state, store):
+    higher_item = {
+        **PASS_1_ITEMS[0],
+        "price": {"value": "229.99", "currency": "USD"},
+    }
+    client = FakeEbayClient([[PASS_1_ITEMS[0]], [higher_item]])
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=True)
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+
+    mock_notify.assert_not_called()
+    assert store.get_last_price(state.watches[0].name, PASS_1_ITEMS[0]["itemId"]) == (
+        "229.99",
+        "USD",
+    )
+
+
+def test_seen_store_migrates_legacy_database(tmp_path):
+    import sqlite3
+
+    db_path = tmp_path / "legacy.db"
+    connection = sqlite3.connect(db_path)
+    connection.execute("""CREATE TABLE seen (
+               watch_name TEXT, item_id TEXT, first_seen INTEGER,
+               PRIMARY KEY (watch_name, item_id)
+           )""")
+    connection.execute(
+        "INSERT INTO seen (watch_name, item_id, first_seen) VALUES (?, ?, ?)",
+        ("watch", "item", 1),
+    )
+    connection.commit()
+    connection.close()
+
+    migrated_store = SeenStore(path=str(db_path))
+    try:
+        assert migrated_store.get_last_price("watch", "item") == (None, None)
+        migrated_store.update_last_price("watch", "item", "12.34", "USD")
+        assert migrated_store.get_last_price("watch", "item") == ("12.34", "USD")
+    finally:
+        migrated_store.close()
+
+
 def test_ebay_api_error_for_one_watch_does_not_block_others(tmp_path, store):
     from ebay_bot.ebay_client import EbayApiError
 

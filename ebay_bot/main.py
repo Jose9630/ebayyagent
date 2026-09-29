@@ -11,6 +11,7 @@ import os
 import shutil
 import signal
 import time
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import FrameType
 
@@ -27,6 +28,20 @@ from .storage import SeenStore
 logger = logging.getLogger("ebay_bot")
 
 _shutdown_requested = False
+
+
+def _item_price(item: dict) -> tuple[str, str | None] | None:
+    price_data = item.get("price") or {}
+    value = price_data.get("value")
+    if value is None:
+        return None
+    try:
+        price = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if not price.is_finite():
+        return None
+    return str(value), price_data.get("currency")
 
 
 def _handle_shutdown_signal(signum: int, frame: FrameType | None) -> None:
@@ -56,12 +71,32 @@ def poll_ebay_once(
             item_id = item.get("itemId")
             if not item_id:
                 continue
+            price = _item_price(item)
             if store.is_new(watch.name, item_id):
-                store.mark_seen(watch.name, item_id)
+                store.mark_seen(
+                    watch.name,
+                    item_id,
+                    *(price if price is not None else (None, None)),
+                )
                 if baseline_watch:
                     continue
                 logger.info(f"[{watch.name}] New listing: {item.get('title')}")
                 notify_telegram(bot_token, chat_id, item, watch.name)
+            elif price is not None:
+                previous_value, previous_currency = store.get_last_price(watch.name, item_id)
+                current_value, current_currency = price
+                if previous_value is not None and previous_currency == current_currency:
+                    try:
+                        price_dropped = Decimal(current_value) < Decimal(previous_value)
+                    except InvalidOperation:
+                        price_dropped = False
+                    if price_dropped:
+                        logger.info(
+                            f"[{watch.name}] Price drop for {item.get('title')}: "
+                            f"{previous_value} -> {current_value} {current_currency or ''}"
+                        )
+                        notify_telegram(bot_token, chat_id, item, watch.name, price_drop=True)
+                store.update_last_price(watch.name, item_id, current_value, current_currency)
         if watch.name in state.pending_baseline_watch_names:
             completed_baselines.add(watch.name)
     state.pending_baseline_watch_names.difference_update(completed_baselines)
