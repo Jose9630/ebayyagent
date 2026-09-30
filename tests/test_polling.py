@@ -86,6 +86,39 @@ def test_new_listing_triggers_exactly_one_notification(state, store):
     assert called_item["itemId"] == "v1|100003|0"
 
 
+def test_excluded_keyword_suppresses_new_listing_alert(state, store):
+    state.watches[0].exclude_keywords = ["  INTEL  "]
+    excluded_item = {**NEW_ITEM, "title": "Intel Mini PC i7"}
+    client = FakeEbayClient([[excluded_item]])
+
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+
+    mock_notify.assert_not_called()
+    assert store.is_new(state.watches[0].name, excluded_item["itemId"]) is False
+
+
+def test_excluded_keyword_suppresses_price_drop_alert_and_updates_price(state, store):
+    original_item = {**PASS_1_ITEMS[0], "title": "Mini PC Ryzen 7"}
+    excluded_item = {
+        **original_item,
+        "title": "Intel Mini PC Ryzen 7",
+        "price": {"value": "199.99", "currency": "USD"},
+    }
+    state.watches[0].exclude_keywords = ["intel"]
+    client = FakeEbayClient([[original_item], [excluded_item]])
+
+    with patch("ebay_bot.main.notify_telegram") as mock_notify:
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=True)
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=False)
+
+    mock_notify.assert_not_called()
+    assert store.get_last_price(state.watches[0].name, original_item["itemId"]) == (
+        "199.99",
+        "USD",
+    )
+
+
 def test_added_watch_catches_up_silently_then_notifies_new_listings(state, store):
     state.config.watches.clear()
     with patch("ebay_bot.commands.send_message"):

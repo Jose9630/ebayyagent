@@ -81,6 +81,7 @@ def test_appconfig_loads_from_yaml(tmp_path):
         "    keywords: mini pc\n"
         "    min_price: 50\n"
         "    max_price: 300\n"
+        "    exclude_keywords: [intel, refurbished]\n"
         "    listing_type: BOTH\n"
     )
     config = AppConfig.load(config_path)
@@ -88,6 +89,7 @@ def test_appconfig_loads_from_yaml(tmp_path):
     assert len(config.watches) == 1
     assert config.watches[0].name == "MiniPC"
     assert config.watches[0].min_price == 50
+    assert config.watches[0].exclude_keywords == ["intel", "refurbished"]
 
 
 def test_appconfig_save_watches_persists_changes(tmp_path):

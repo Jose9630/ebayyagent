@@ -157,6 +157,31 @@ def test_malformed_addwatch_is_rejected(state):
     assert "Couldn't parse" in mock_send.call_args[0][2]
 
 
+def test_exkeyword_adds_and_persists_for_watch(state):
+    state.config.watches.append(Watch(name="MiniPC", keywords="mini pc"))
+
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/exkeyword MiniPC | refurbished"), state, "tok", ALLOWED_CHAT)
+
+    assert state.watches[0].exclude_keywords == ["refurbished"]
+    assert AppConfig.load(state.config.path).watches[0].exclude_keywords == ["refurbished"]
+    assert "refurbished" in mock_send.call_args[0][2]
+
+
+def test_exkeyword_rejects_duplicate_and_malformed_arguments(state):
+    state.config.watches.append(
+        Watch(name="MiniPC", keywords="mini pc", exclude_keywords=["refurbished"])
+    )
+
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/exkeyword MiniPC | REfUrBiShEd"), state, "tok", ALLOWED_CHAT)
+        handle_update(make_update("/exkeyword MiniPC"), state, "tok", ALLOWED_CHAT)
+
+    assert state.watches[0].exclude_keywords == ["refurbished"]
+    assert "already excluded" in mock_send.call_args_list[0].args[2]
+    assert "Usage" in mock_send.call_args_list[1].args[2]
+
+
 def test_removewatch(state):
     state.config.watches.append(
         Watch(name="MiniPC", keywords="mini pc", min_price=50, max_price=300)

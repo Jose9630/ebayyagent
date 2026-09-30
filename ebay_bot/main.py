@@ -71,6 +71,12 @@ def poll_ebay_once(
             item_id = item.get("itemId")
             if not item_id:
                 continue
+            title = (item.get("title") or "").casefold()
+            excluded = any(
+                keyword.strip().casefold() in title
+                for keyword in watch.exclude_keywords
+                if keyword.strip()
+            )
             price = _item_price(item)
             if store.is_new(watch.name, item_id):
                 store.mark_seen(
@@ -78,7 +84,7 @@ def poll_ebay_once(
                     item_id,
                     *(price if price is not None else (None, None)),
                 )
-                if baseline_watch:
+                if baseline_watch or excluded:
                     continue
                 logger.info(f"[{watch.name}] New listing: {item.get('title')}")
                 notify_telegram(bot_token, chat_id, item, watch.name)
@@ -90,7 +96,7 @@ def poll_ebay_once(
                         price_dropped = Decimal(current_value) < Decimal(previous_value)
                     except InvalidOperation:
                         price_dropped = False
-                    if price_dropped:
+                    if price_dropped and not excluded:
                         logger.info(
                             f"[{watch.name}] Price drop for {item.get('title')}: "
                             f"{previous_value} -> {current_value} {current_currency or ''}"

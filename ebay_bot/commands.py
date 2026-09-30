@@ -1,5 +1,5 @@
 """Telegram bot command handling: /status, /pause, /resume, /addwatch,
-/removewatch, /listwatches, /help. Only responds to the chat_id configured
+/exkeyword, /removewatch, /listwatches, /help. Only responds to the chat_id configured
 in .env, so random people can't control your bot.
 
 Uses Telegram's HTML parse mode (not Markdown) since eBay listing titles and
@@ -105,6 +105,7 @@ HELP_TEXT = (
     "  type is AUCTION, FIXED_PRICE, or BOTH.\n"
     "  site, category_id, brands are optional. brands is a comma-separated list,\n"
     "  OR-matched against listing titles - catches brands sellers typed manually too.\n"
+    "/exkeyword watch name | keyword — exclude a title keyword from alerts for that watch\n"
     "/removewatch name — remove a watch by name"
 )
 
@@ -218,6 +219,45 @@ def handle_update(update: dict, state: BotState, bot_token: str, allowed_chat_id
                 "listing_type | site | category_id | brands</code>\n"
                 f"Error: {html.escape(str(e))}",
             )
+
+    elif command == "/exkeyword":
+        fields = arg.split("|", 1)
+        if len(fields) != 2 or not fields[0].strip() or not fields[1].strip():
+            send_message(
+                bot_token,
+                chat_id,
+                "Usage: <code>/exkeyword watch name | keyword</code>",
+            )
+            return
+
+        watch_name, keyword = (field.strip() for field in fields)
+        matches = [w for w in state.watches if w.name.casefold() == watch_name.casefold()]
+        if not matches:
+            send_message(bot_token, chat_id, f"No watch found named: {html.escape(watch_name)}")
+            return
+        if len(matches) > 1:
+            send_message(
+                bot_token, chat_id, f"More than one watch is named: {html.escape(watch_name)}"
+            )
+            return
+
+        watch = matches[0]
+        if any(existing.casefold() == keyword.casefold() for existing in watch.exclude_keywords):
+            send_message(
+                bot_token,
+                chat_id,
+                f'"{html.escape(keyword)}" is already excluded for {html.escape(watch.name)}.',
+            )
+            return
+
+        watch.exclude_keywords.append(keyword)
+        state.config.save_watches()
+        send_message(
+            bot_token,
+            chat_id,
+            f'Added "{html.escape(keyword)}" to excluded keywords for '
+            f"{html.escape(watch.name)}.",
+        )
 
     elif command == "/removewatch":
         name = arg.strip()

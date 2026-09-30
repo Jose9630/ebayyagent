@@ -27,6 +27,7 @@ class Watch:
     currency: str = "USD"
     listing_type: str = "BOTH"  # AUCTION | FIXED_PRICE | BOTH
     site: str = "EBAY_US"
+    exclude_keywords: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.listing_type = self.listing_type.upper()
@@ -63,6 +64,7 @@ class Watch:
         return cls(
             name=data["name"],
             keywords=data.get("keywords", ""),
+            exclude_keywords=list(data.get("exclude_keywords") or []),
             category_id=data.get("category_id") or "",
             brands=list(data.get("brands") or []),
             min_price=data.get("min_price"),
