@@ -3,6 +3,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
+from ebay_bot.config import Watch
 from ebay_bot.ebay_client import EbayApiError, EbayClient
 
 
@@ -81,6 +82,22 @@ def test_search_requests_shipping_options_field():
         client.search(keywords="mini pc")
 
     assert "shippingOptions" in mock_request.call_args.kwargs["params"]["fields"]
+
+
+def test_search_sends_delivery_location_for_shipping_estimates():
+    client = EbayClient("id", "secret")
+    client._token = "cached-token"
+    client._token_expiry = 9_999_999_999
+
+    response = _mock_response(200, {"itemSummaries": []})
+    with patch("ebay_bot.ebay_client.requests.request", return_value=response) as mock_request:
+        client.search_watch(
+            Watch(name="MiniPC", keywords="mini pc"),
+            delivery_postal_code="11518",
+        )
+
+    headers = mock_request.call_args.kwargs["headers"]
+    assert headers["X-EBAY-C-ENDUSERCTX"] == "contextualLocation=country%3DUS%2Czip%3D11518"
 
 
 def test_search_raises_after_exhausting_retries():

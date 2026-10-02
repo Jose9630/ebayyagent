@@ -12,7 +12,7 @@ and stays within eBay's terms of use.
 
 ```
 ebay-bot/
-├── src/ebay_bot/          # the installable package
+├── ebay_bot/              # the installable package
 │   ├── config.py          # typed, validated config (Watch, AppConfig, Credentials)
 │   ├── ebay_client.py      # eBay Browse API client with retry/backoff
 │   ├── notifier.py         # Telegram notification sender
@@ -79,7 +79,7 @@ venv\Scripts\pip install -e ".[dev]"
 venv/bin/pip install -e ".[dev]"
 ```
 
-Installing with `-e` (editable mode) means changes to the code under `src/ebay_bot/`
+Installing with `-e` (editable mode) means changes to the code under `ebay_bot/`
 take effect immediately — no reinstalling needed.
 
 ```bash
@@ -107,12 +107,19 @@ watches:
       - "Beelink"
       - "GMKtec"
       - "Minisforum"
+    exclude_keywords:       # optional - matching listing titles never trigger alerts
+      - "refurbished"
+      - "for parts"
     min_price: 50
     max_price: 300
     currency: "USD"
     listing_type: "BOTH"   # AUCTION | FIXED_PRICE | BOTH
     site: "EBAY_US"
 ```
+
+  The bot only returns listings located in the US and uses the US as the shipping
+  destination. Set the shipping destination ZIP privately in Telegram with `/zipcode`;
+  eBay uses it to calculate location-based shipping estimates.
 
 `brands` searches for any of the listed brand names appearing in the listing's actual
 title/description text (using eBay's `q=(Beelink,GMKtec,Minisforum)` OR-group syntax),
@@ -139,6 +146,10 @@ validates this on load and will error clearly if all three are left blank.
 Values are validated on load — e.g. an invalid `listing_type` or `min_price` greater
 than `max_price` will raise a clear error immediately instead of failing silently
 later.
+
+`exclude_keywords` are checked against listing titles outside of eBay search, without
+changing the results returned by the API. Matching is case-insensitive and suppresses
+both new-listing and price-drop alerts for that watch; excluded items are still tracked.
 
 
 ## 5. Run it
@@ -185,10 +196,13 @@ Message your bot on Telegram anytime:
 |---|---|
 | `/help` | shows this list |
 | `/status` | running/paused, uptime, watch count, last poll time |
+| `/interval [seconds]` | shows the current polling interval or changes it, e.g. `/interval 120` |
+| `/zipcode [US ZIP]` | sets or reports the private shipping ZIP; `/zipcode clear` removes it |
 | `/pause` | stops polling eBay (bot itself stays running and responsive) |
 | `/resume` | resumes polling |
 | `/listwatches` | shows all active watches |
-| `/addwatch name \| keywords \| min \| max \| type \| site \| category_id \| brands` | adds a new watch on the fly, e.g. `/addwatch MiniPCs \| \| 50 \| 300 \| BOTH \| EBAY_US \| 179 \| Beelink,GMKtec,Minisforum` (site and category_id are optional per eBay's API, but set category_id when using brands or matches won't be scoped to the right category) |
+| `/addwatch name \| keywords \| min \| max \| type \| site \| category_id \| brands` | adds a new watch on the fly; existing matches are recorded silently on its first successful poll. Example: `/addwatch MiniPCs \| \| 50 \| 300 \| BOTH \| EBAY_US \| 179 \| Beelink,GMKtec,Minisforum` (site and category_id are optional per eBay's API, but set category_id when using brands or matches won't be scoped to the right category) |
+| `/exkeyword watch name \| keyword` | excludes titles containing the keyword from alerts for that watch; matching is case-insensitive. Example: `/exkeyword MiniPCs \| refurbished` |
 | `/removewatch name` | removes a watch by name |
 
 Only messages from the `TELEGRAM_CHAT_ID` in your `.env` are accepted — anyone else
@@ -285,3 +299,6 @@ It will now start automatically on boot and restart itself if it ever crashes.
   near-duplicate sub-categories — e.g. "Desktops & All-In-Ones" splits into
   **"PC Desktops & All-In-Ones"** (`179`) and **"Apple Desktops & All-In-Ones"**
   (separate ID) — so pick the specific sub-category you actually want.
+#   e b a y y a g e n t 
+ 
+ 

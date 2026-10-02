@@ -6,6 +6,7 @@ import requests
 
 from ebay_bot.commands import BotState, handle_update, send_message
 from ebay_bot.config import AppConfig, Watch
+from ebay_bot.storage import SeenStore
 
 ALLOWED_CHAT = "111111"
 
@@ -19,7 +20,9 @@ def state(tmp_path):
     config_path = tmp_path / "config.yaml"
     config_path.write_text("poll_interval_seconds: 60\nwatches: []\n")
     config = AppConfig(poll_interval_seconds=60, watches=[], path=config_path)
-    return BotState(config=config)
+    store = SeenStore(path=str(tmp_path / "seen.db"))
+    yield BotState(config=config, store=store)
+    store.close()
 
 
 def test_send_message_logs_api_description_without_bot_token(caplog):
@@ -73,6 +76,30 @@ def test_interval_rejects_invalid_values(state, argument):
 
     assert state.poll_interval == 60
     assert "Usage" in mock_send.call_args[0][2]
+
+
+def test_zipcode_saves_privately_and_does_not_echo_zip(state):
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/zipcode 11518"), state, "tok", ALLOWED_CHAT)
+
+    assert state.delivery_postal_code == "11518"
+    assert state.store.get_setting("delivery_postal_code") == "11518"
+    assert "11518" not in mock_send.call_args.args[2]
+    assert "delivery_postal_code" not in state.config.path.read_text()
+
+
+def test_zipcode_clear_and_invalid_input(state):
+    state.store.set_setting("delivery_postal_code", "11518")
+    state.delivery_postal_code = "11518"
+
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/zipcode 1234"), state, "tok", ALLOWED_CHAT)
+        assert state.delivery_postal_code == "11518"
+        assert "Usage" in mock_send.call_args.args[2]
+        handle_update(make_update("/zipcode clear"), state, "tok", ALLOWED_CHAT)
+
+    assert state.delivery_postal_code is None
+    assert state.store.get_setting("delivery_postal_code") is None
 
 
 def test_pause_and_resume(state):

@@ -42,8 +42,10 @@ class FakeEbayClient:
     def __init__(self, responses):
         self._responses = responses
         self.calls = 0
+        self.delivery_postal_codes = []
 
-    def search_watch(self, watch):
+    def search_watch(self, watch, delivery_postal_code=None):
+        self.delivery_postal_codes.append(delivery_postal_code)
         response = self._responses[min(self.calls, len(self._responses) - 1)]
         self.calls += 1
         return response
@@ -73,6 +75,16 @@ def test_baseline_pass_sends_no_notifications(state, store):
     with patch("ebay_bot.main.notify_telegram") as mock_notify:
         poll_ebay_once(client, store, state, "tok", "chat", first_pass=True)
     mock_notify.assert_not_called()
+
+
+def test_polling_passes_private_zip_to_each_watch_search(state, store):
+    state.delivery_postal_code = "11518"
+    client = FakeEbayClient([PASS_1_ITEMS])
+
+    with patch("ebay_bot.main.notify_telegram"):
+        poll_ebay_once(client, store, state, "tok", "chat", first_pass=True)
+
+    assert client.delivery_postal_codes == ["11518"]
 
 
 def test_new_listing_triggers_exactly_one_notification(state, store):
@@ -164,7 +176,7 @@ def test_added_watch_retries_silent_baseline_after_api_error(state, store):
     class FailingOnceClient:
         calls = 0
 
-        def search_watch(self, watch):
+        def search_watch(self, watch, delivery_postal_code=None):
             self.calls += 1
             if self.calls == 1:
                 from ebay_bot.ebay_client import EbayApiError
@@ -269,7 +281,7 @@ def test_ebay_api_error_for_one_watch_does_not_block_others(tmp_path, store):
     state = BotState(config=config)
 
     class FlakyClient:
-        def search_watch(self, watch):
+        def search_watch(self, watch, delivery_postal_code=None):
             if watch.name == "Broken watch":
                 raise EbayApiError("simulated failure")
             return [NEW_ITEM]

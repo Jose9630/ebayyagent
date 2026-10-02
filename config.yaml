@@ -1,4 +1,4 @@
-poll_interval_seconds: 60
+poll_interval_seconds: 40
 watches:
 - name: Mini PC Listings
   keywords: ''
@@ -17,6 +17,16 @@ watches:
   - Getorli
   min_price: 10
   max_price: 20000
+  currency: USD
+  listing_type: BOTH
+  site: EBAY_US
+- name: "New Ram Listing\U0001F4A2"
+  keywords: ''
+  category_id: '170083'
+  brands:
+  - DDR5
+  min_price: 10.0
+  max_price: 50000.0
   currency: USD
   listing_type: BOTH
   site: EBAY_US

@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import html
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 
 import requests
 
 from .config import AppConfig, Watch
+from .storage import SeenStore
 from .telegram_errors import describe_telegram_error
 
 logger = logging.getLogger("ebay_bot")
@@ -30,6 +32,8 @@ class BotState:
     last_poll_time: float | None = None
     pending_baseline_watch_names: set[str] = field(default_factory=set)
     start_time: float = field(default_factory=time.time)
+    store: SeenStore | None = None
+    delivery_postal_code: str | None = None
 
     @property
     def watches(self) -> list[Watch]:
@@ -96,6 +100,7 @@ HELP_TEXT = (
     "<b>eBay Watcher Bot</b>\n"
     "/status — show current status\n"
     "/interval [seconds] — show or change the polling interval\n"
+    "/zipcode [US ZIP] — set or view the private shipping ZIP; use 'clear' to remove it\n"
     "/pause — pause polling\n"
     "/resume — resume polling\n"
     "/listwatches — show active watches\n"
@@ -168,6 +173,30 @@ def handle_update(update: dict, state: BotState, bot_token: str, allowed_chat_id
         state.config.poll_interval_seconds = interval
         state.config.save()
         send_message(bot_token, chat_id, f"Polling interval set to {interval}s.")
+
+    elif command == "/zipcode":
+        if state.store is None:
+            send_message(bot_token, chat_id, "Private ZIP storage is unavailable.")
+            return
+        if not arg:
+            status = "set" if state.delivery_postal_code else "not set"
+            send_message(bot_token, chat_id, f"Shipping ZIP is {status}.")
+            return
+        if arg.casefold() == "clear":
+            state.store.set_setting("delivery_postal_code", None)
+            state.delivery_postal_code = None
+            send_message(bot_token, chat_id, "Shipping ZIP cleared.")
+            return
+        if not re.fullmatch(r"\d{5}(?:-\d{4})?", arg):
+            send_message(
+                bot_token,
+                chat_id,
+                "Usage: <code>/zipcode 12345</code> or <code>/zipcode clear</code>",
+            )
+            return
+        state.store.set_setting("delivery_postal_code", arg)
+        state.delivery_postal_code = arg
+        send_message(bot_token, chat_id, "Shipping ZIP saved privately.")
 
     elif command == "/pause":
         state.paused = True

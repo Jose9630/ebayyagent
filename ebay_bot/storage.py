@@ -20,11 +20,35 @@ class SeenStore:
                 PRIMARY KEY (watch_name, item_id)
             )
             """)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+            """)
         columns = {row[1] for row in self.conn.execute("PRAGMA table_info(seen)").fetchall()}
         if "last_price" not in columns:
             self.conn.execute("ALTER TABLE seen ADD COLUMN last_price TEXT")
         if "last_currency" not in columns:
             self.conn.execute("ALTER TABLE seen ADD COLUMN last_currency TEXT")
+        self.conn.commit()
+
+    def get_setting(self, key: str) -> str | None:
+        row = self.conn.execute(
+            "SELECT value FROM settings WHERE key = ?",
+            (key,),
+        ).fetchone()
+        return None if row is None else row[0]
+
+    def set_setting(self, key: str, value: str | None) -> None:
+        if value is None:
+            self.conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+        else:
+            self.conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
         self.conn.commit()
 
     def is_new(self, watch_name: str, item_id: str) -> bool:

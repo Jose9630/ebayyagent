@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import logging
 import time
+from urllib.parse import quote
 
 import requests
 
@@ -75,7 +76,12 @@ class EbayClient:
                     time.sleep(wait)
         raise EbayApiError(f"eBay API request failed after {_MAX_RETRIES} attempts") from last_exc
 
-    def search_watch(self, watch: Watch, limit: int = 50) -> list[dict]:
+    def search_watch(
+        self,
+        watch: Watch,
+        limit: int = 50,
+        delivery_postal_code: str | None = None,
+    ) -> list[dict]:
         """Convenience wrapper: search using the criteria defined on a Watch."""
         return self.search(
             keywords=watch.keywords,
@@ -87,6 +93,7 @@ class EbayClient:
             listing_type=watch.listing_type,
             site=watch.site,
             limit=limit,
+            delivery_postal_code=delivery_postal_code,
         )
 
     def search(
@@ -100,6 +107,7 @@ class EbayClient:
         listing_type: str = "BOTH",  # AUCTION | FIXED_PRICE | BOTH
         site: str = "EBAY_US",
         limit: int = 50,
+        delivery_postal_code: str | None = None,
     ) -> list[dict]:
         token = self._get_token()
 
@@ -145,6 +153,10 @@ class EbayClient:
             "Authorization": f"Bearer {token}",
             "X-EBAY-C-MARKETPLACE-ID": site,
         }
+        contextual_location = "country=US"
+        if delivery_postal_code:
+            contextual_location += f",zip={delivery_postal_code}"
+        headers["X-EBAY-C-ENDUSERCTX"] = f"contextualLocation={quote(contextual_location, safe='')}"
 
         resp = self._request_with_retry(
             "GET",

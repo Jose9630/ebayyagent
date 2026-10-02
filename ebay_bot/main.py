@@ -62,7 +62,10 @@ def poll_ebay_once(
     for watch in state.watches:
         baseline_watch = first_pass or watch.name in state.pending_baseline_watch_names
         try:
-            items = client.search_watch(watch)
+            items = client.search_watch(
+                watch,
+                delivery_postal_code=state.delivery_postal_code,
+            )
         except EbayApiError as e:
             logger.error(f"[{watch.name}] search failed: {e}")
             continue
@@ -139,7 +142,11 @@ def main() -> None:
             "Telegram not configured (check your .env file) - commands and alerts disabled."
         )
 
-    state = BotState(config=config)
+    state = BotState(
+        config=config,
+        store=store,
+        delivery_postal_code=store.get_setting("delivery_postal_code"),
+    )
 
     logger.info(
         f"Starting eBay listing bot: {len(config.watches)} watch(es), "
