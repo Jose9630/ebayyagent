@@ -50,7 +50,47 @@ def test_notify_telegram_escapes_markdown_breaking_title():
     assert "Mini PC&#x27;s &amp; Deals" in text
 
 
+def test_notify_telegram_includes_shipping_fee():
+    item = {
+        "title": "Mini PC",
+        "price": {"value": "199.99", "currency": "USD"},
+        "buyingOptions": ["FIXED_PRICE"],
+        "shippingOptions": [{"shippingCost": {"value": "12.50", "currency": "USD"}}],
+        "itemWebUrl": "https://www.ebay.com/itm/456",
+    }
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status.return_value = None
+
+    with patch("ebay_bot.notifier.requests.post", return_value=mock_resp) as mock_post:
+        notify_telegram("tok", "chat", item, "Mini PC deals")
+
+    text = mock_post.call_args.kwargs["data"]["text"]
+    assert "Shipping" in text
+    assert "12.50" in text
+    assert "USD" in text
+
+
 def test_notify_telegram_noop_without_credentials():
     with patch("ebay_bot.notifier.requests.post") as mock_post:
         notify_telegram(None, None, {"title": "x"}, "watch")
     mock_post.assert_not_called()
+
+
+def test_notify_telegram_retries_after_rate_limit():
+    rate_limited_resp = MagicMock()
+    rate_limited_resp.status_code = 429
+    rate_limited_resp.json.return_value = {"parameters": {"retry_after": 2}}
+    success_resp = MagicMock()
+    success_resp.status_code = 200
+
+    with (
+        patch(
+            "ebay_bot.notifier.requests.post",
+            side_effect=[rate_limited_resp, success_resp],
+        ) as mock_post,
+        patch("ebay_bot.notifier.time.sleep") as mock_sleep,
+    ):
+        notify_telegram("tok", "chat", {"title": "x"}, "watch")
+
+    assert mock_post.call_count == 2
+    mock_sleep.assert_called_once_with(2)
