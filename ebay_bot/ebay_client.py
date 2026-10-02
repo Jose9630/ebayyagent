@@ -129,7 +129,11 @@ class EbayClient:
             query_parts.append(f"({','.join(brands)})")
         q = " ".join(query_parts)
 
-        params: dict = {"limit": limit, "sort": "newlyListed"}
+        params: dict = {
+            "limit": limit,
+            "sort": "newlyListed",
+            "fields": "itemId,title,price,buyingOptions,itemWebUrl,shippingOptions",
+        }
         if q:
             params["q"] = q
         if category_id:

@@ -71,6 +71,18 @@ def test_search_only_returns_listings_with_us_location():
     assert "itemLocationCountry:US" in mock_request.call_args.kwargs["params"]["filter"]
 
 
+def test_search_requests_shipping_options_field():
+    client = EbayClient("id", "secret")
+    client._token = "cached-token"
+    client._token_expiry = 9_999_999_999
+
+    response = _mock_response(200, {"itemSummaries": []})
+    with patch("ebay_bot.ebay_client.requests.request", return_value=response) as mock_request:
+        client.search(keywords="mini pc")
+
+    assert "shippingOptions" in mock_request.call_args.kwargs["params"]["fields"]
+
+
 def test_search_raises_after_exhausting_retries():
     client = EbayClient("id", "secret")
     client._token = "cached-token"
