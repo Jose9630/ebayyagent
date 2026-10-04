@@ -54,6 +54,32 @@ def test_status_responds_to_authorized_chat(state):
     mock_send.assert_called_once()
 
 
+@pytest.mark.parametrize("command", ["/help", "/start"])
+def test_help_commands_send_html_safe_command_list(state, command):
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update(command), state, "tok", ALLOWED_CHAT)
+
+    mock_send.assert_called_once()
+    help_text = mock_send.call_args.args[2]
+    assert "<code>/cycle 1.5</code>" in help_text
+    assert "<hours>" not in help_text
+    assert all(
+        f"/{name}" in help_text
+        for name in (
+            "status",
+            "interval",
+            "cycle",
+            "zipcode",
+            "pause",
+            "resume",
+            "listwatches",
+            "addwatch",
+            "exkeyword",
+            "removewatch",
+        )
+    )
+
+
 def test_interval_reports_current_value(state):
     with patch("ebay_bot.commands.send_message") as mock_send:
         handle_update(make_update("/interval"), state, "tok", ALLOWED_CHAT)
