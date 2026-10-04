@@ -1,4 +1,5 @@
 import logging
+import time
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -78,6 +79,43 @@ def test_interval_rejects_invalid_values(state, argument):
     assert "Usage" in mock_send.call_args[0][2]
 
 
+def test_cycle_starts_running_timer_and_reports_status(state):
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/cycle 1.5"), state, "tok", ALLOWED_CHAT)
+
+    assert state.paused is False
+    assert state.cycle_end_time is not None
+    assert state.cycle_end_time - time.time() == pytest.approx(5400, abs=1)
+    assert "1.5 hour(s)" in mock_send.call_args.args[2]
+
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/cycle"), state, "tok", ALLOWED_CHAT)
+
+    assert "remaining" in mock_send.call_args.args[2]
+
+
+@pytest.mark.parametrize("argument", ["0", "-1", "fast", "nan", "inf"])
+def test_cycle_rejects_invalid_hours(state, argument):
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update(f"/cycle {argument}"), state, "tok", ALLOWED_CHAT)
+
+    assert state.cycle_end_time is None
+    assert state.paused is False
+    assert "Usage" in mock_send.call_args.args[2]
+
+
+def test_cycle_pauses_when_expired(state):
+    state.paused = False
+    state.cycle_end_time = 100
+
+    assert not state.pause_if_cycle_expired(99)
+    assert state.paused is False
+    assert state.pause_if_cycle_expired(100)
+    assert state.paused is True
+    assert state.cycle_end_time is None
+    assert not state.pause_if_cycle_expired(101)
+
+
 def test_zipcode_saves_privately_and_does_not_echo_zip(state):
     with patch("ebay_bot.commands.send_message") as mock_send:
         handle_update(make_update("/zipcode 11518"), state, "tok", ALLOWED_CHAT)
@@ -104,10 +142,13 @@ def test_zipcode_clear_and_invalid_input(state):
 
 def test_pause_and_resume(state):
     with patch("ebay_bot.commands.send_message"):
+        state.cycle_end_time = time.time() + 3600
         handle_update(make_update("/pause"), state, "tok", ALLOWED_CHAT)
         assert state.paused is True
+        assert state.cycle_end_time is None
         handle_update(make_update("/resume"), state, "tok", ALLOWED_CHAT)
         assert state.paused is False
+        assert state.cycle_end_time is None
 
 
 def test_addwatch_adds_and_persists(state):

@@ -175,6 +175,14 @@ def main() -> None:
                 time.sleep(5)
 
             now = time.time()
+            if state.pause_if_cycle_expired(now):
+                logger.info("Timed cycle completed; polling paused.")
+                if creds.telegram_bot_token and creds.telegram_chat_id:
+                    send_message(
+                        creds.telegram_bot_token,
+                        creds.telegram_chat_id,
+                        "⏸ Cycle complete. Bot paused. Send /resume or /cycle to continue.",
+                    )
             if not state.paused and now - last_ebay_poll >= state.poll_interval:
                 poll_ebay_once(
                     client,

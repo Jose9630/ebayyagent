@@ -1,4 +1,4 @@
-"""Telegram bot command handling: /status, /pause, /resume, /addwatch,
+"""Telegram bot command handling: /status, /cycle, /pause, /resume, /addwatch,
 /exkeyword, /removewatch, /listwatches, /help. Only responds to the chat_id configured
 in .env, so random people can't control your bot.
 
@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import html
 import logging
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -29,6 +30,7 @@ logger = logging.getLogger("ebay_bot")
 class BotState:
     config: AppConfig
     paused: bool = False
+    cycle_end_time: float | None = None
     last_poll_time: float | None = None
     pending_baseline_watch_names: set[str] = field(default_factory=set)
     start_time: float = field(default_factory=time.time)
@@ -42,6 +44,13 @@ class BotState:
     @property
     def poll_interval(self) -> int:
         return self.config.poll_interval_seconds
+
+    def pause_if_cycle_expired(self, now: float) -> bool:
+        if self.cycle_end_time is None or now < self.cycle_end_time:
+            return False
+        self.cycle_end_time = None
+        self.paused = True
+        return True
 
 
 def get_updates(bot_token: str, offset: int | None = None, timeout: int = 5):
@@ -100,6 +109,7 @@ HELP_TEXT = (
     "<b>eBay Watcher Bot</b>\n"
     "/status — show current status\n"
     "/interval [seconds] — show or change the polling interval\n"
+    "/cycle <hours> — run for this many hours, then pause (decimals allowed)\n"
     "/zipcode [US ZIP] — set or view the private shipping ZIP; use 'clear' to remove it\n"
     "/pause — pause polling\n"
     "/resume — resume polling\n"
@@ -144,6 +154,11 @@ def handle_update(update: dict, state: BotState, bot_token: str, allowed_chat_id
             if state.last_poll_time
             else "never yet"
         )
+        cycle_status = (
+            f"active ({math.ceil(max(0, state.cycle_end_time - time.time()) / 60)} min remaining)"
+            if state.cycle_end_time is not None
+            else "not scheduled"
+        )
         send_message(
             bot_token,
             chat_id,
@@ -151,8 +166,38 @@ def handle_update(update: dict, state: BotState, bot_token: str, allowed_chat_id
             f"Uptime: {uptime_min} min\n"
             f"Watches: {len(state.watches)}\n"
             f"Poll interval: {state.poll_interval}s\n"
+            f"Cycle: {cycle_status}\n"
             f"Last poll: {last_poll}",
         )
+
+    elif command == "/cycle":
+        if not arg:
+            if state.cycle_end_time is None:
+                send_message(bot_token, chat_id, "No timed cycle is active.")
+            else:
+                remaining_min = math.ceil(max(0, state.cycle_end_time - time.time()) / 60)
+                send_message(
+                    bot_token,
+                    chat_id,
+                    f"Timed cycle active: {remaining_min} min remaining.",
+                )
+            return
+        try:
+            hours = float(arg)
+            duration_seconds = hours * 3600
+            if hours <= 0 or not math.isfinite(duration_seconds):
+                raise ValueError
+        except ValueError:
+            send_message(
+                bot_token,
+                chat_id,
+                "Usage: /cycle [positive number of hours, decimals allowed]",
+            )
+            return
+
+        state.paused = False
+        state.cycle_end_time = time.time() + duration_seconds
+        send_message(bot_token, chat_id, f"▶️ Cycle started for {hours:g} hour(s).")
 
     elif command == "/interval":
         if not arg:
@@ -200,10 +245,12 @@ def handle_update(update: dict, state: BotState, bot_token: str, allowed_chat_id
 
     elif command == "/pause":
         state.paused = True
+        state.cycle_end_time = None
         send_message(bot_token, chat_id, "⏸ Paused. Send /resume to continue.")
 
     elif command == "/resume":
         state.paused = False
+        state.cycle_end_time = None
         send_message(bot_token, chat_id, "▶️ Resumed.")
 
     elif command == "/listwatches":
