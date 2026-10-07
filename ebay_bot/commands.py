@@ -1,4 +1,4 @@
-"""Telegram bot command handling: /status, /balance, /cycle, /pause, /resume, /addwatch,
+"""Telegram bot command handling: /status, /cycle, /pause, /resume, /addwatch,
 /exkeyword, /removewatch, /listwatches, /help. Only responds to the chat_id configured
 in .env, so random people can't control your bot.
 
@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 import requests
 
 from .config import AppConfig, Watch
-from .ebay_client import EbayApiError, EbayClient
 from .storage import SeenStore
 from .telegram_errors import describe_telegram_error
 
@@ -109,7 +108,6 @@ def _format_watch(w: Watch) -> str:
 HELP_TEXT = (
     "<b>eBay Watcher Bot</b>\n"
     "/status — show current status\n"
-    "/balance — show remaining daily eBay Browse API calls\n"
     "/interval [seconds] — show or change the polling interval\n"
     "/cycle hours — run for this many hours, then pause (decimals allowed; "
     "example: <code>/cycle 1.5</code>)\n"
@@ -128,13 +126,7 @@ HELP_TEXT = (
 )
 
 
-def handle_update(
-    update: dict,
-    state: BotState,
-    bot_token: str,
-    allowed_chat_id: str,
-    client: EbayClient | None = None,
-) -> None:
+def handle_update(update: dict, state: BotState, bot_token: str, allowed_chat_id: str) -> None:
     message = update.get("message")
     if not message:
         return
@@ -177,22 +169,6 @@ def handle_update(
             f"Poll interval: {state.poll_interval}s\n"
             f"Cycle: {cycle_status}\n"
             f"Last poll: {last_poll}",
-        )
-
-    elif command == "/balance":
-        if client is None:
-            send_message(bot_token, chat_id, "eBay API balance is unavailable.")
-            return
-        try:
-            remaining, limit = client.get_daily_calls_remaining()
-        except EbayApiError as e:
-            logger.warning(f"Failed to retrieve eBay API balance: {e}")
-            send_message(bot_token, chat_id, "Couldn't retrieve the eBay API balance.")
-            return
-        send_message(
-            bot_token,
-            chat_id,
-            f"Daily eBay Browse API calls left: <b>{remaining:,}</b> of {limit:,}.",
         )
 
     elif command == "/cycle":

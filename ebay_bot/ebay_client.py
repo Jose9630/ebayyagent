@@ -76,53 +76,10 @@ class EbayClient:
                     time.sleep(wait)
         raise EbayApiError(f"eBay API request failed after {_MAX_RETRIES} attempts") from last_exc
 
-    def get_daily_calls_remaining(self) -> tuple[int, int]:
-        """Return the remaining and total daily calls for Browse item search."""
-        token = self._get_token()
-        resp = self._request_with_retry(
-            "GET",
-            "https://api.ebay.com/developer/analytics/v1_beta/rate_limit",
-            headers={"Authorization": f"Bearer {token}"},
-            params={"api_name": "Buy"},
-        )
-        payload = resp.json()
-        if not isinstance(payload, dict):
-            raise EbayApiError("Invalid rate limit response from eBay API")
-        rate_limits = payload.get("rateLimits", [])
-        if not isinstance(rate_limits, list):
-            raise EbayApiError("Invalid rate limit response from eBay API")
-
-        for api_limit in rate_limits:
-            if not isinstance(api_limit, dict) or api_limit.get("apiName") != "Browse":
-                continue
-            resources = api_limit.get("resources", [])
-            if not isinstance(resources, list):
-                continue
-            for resource in resources:
-                if not isinstance(resource, dict) or resource.get("name") != "item_summary":
-                    continue
-                rates = resource.get("rates", [])
-                if not isinstance(rates, list):
-                    continue
-                for rate in rates:
-                    if not isinstance(rate, dict) or rate.get("timeWindow") != 86400:
-                        continue
-                    remaining = rate.get("remaining")
-                    limit = rate.get("limit")
-                    if (
-                        isinstance(remaining, int)
-                        and not isinstance(remaining, bool)
-                        and isinstance(limit, int)
-                        and not isinstance(limit, bool)
-                    ):
-                        return remaining, limit
-
-        raise EbayApiError("Daily Browse API rate limit information is missing from eBay response")
-
     def search_watch(
         self,
         watch: Watch,
-        limit: int = 200,
+        limit: int = 50,
         delivery_postal_code: str | None = None,
     ) -> list[dict]:
         """Convenience wrapper: search using the criteria defined on a Watch."""
@@ -149,7 +106,7 @@ class EbayClient:
         currency: str = "USD",
         listing_type: str = "BOTH",  # AUCTION | FIXED_PRICE | BOTH
         site: str = "EBAY_US",
-        limit: int = 200,
+        limit: int = 50,
         delivery_postal_code: str | None = None,
     ) -> list[dict]:
         token = self._get_token()

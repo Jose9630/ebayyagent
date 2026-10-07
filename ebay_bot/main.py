@@ -170,13 +170,7 @@ def main() -> None:
                     creds.telegram_bot_token, telegram_offset, timeout=5
                 )
                 for update in updates:
-                    handle_update(
-                        update,
-                        state,
-                        creds.telegram_bot_token,
-                        creds.telegram_chat_id,
-                        client,
-                    )
+                    handle_update(update, state, creds.telegram_bot_token, creds.telegram_chat_id)
             else:
                 time.sleep(5)
 

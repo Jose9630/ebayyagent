@@ -32,56 +32,6 @@ def test_get_token_is_cached_across_calls():
     mock_request.assert_called_once()  # second call used the cache, no new request
 
 
-def test_get_daily_calls_remaining_reads_browse_search_daily_rate():
-    client = EbayClient("id", "secret")
-    client._token = "cached-token"
-    client._token_expiry = 9_999_999_999
-    response = _mock_response(
-        200,
-        {
-            "rateLimits": [
-                {
-                    "apiName": "Browse",
-                    "resources": [
-                        {
-                            "name": "item_summary",
-                            "rates": [
-                                {
-                                    "limit": 5000,
-                                    "remaining": 4321,
-                                    "timeWindow": 86400,
-                                }
-                            ],
-                        }
-                    ],
-                }
-            ]
-        },
-    )
-
-    with patch("ebay_bot.ebay_client.requests.request", return_value=response) as mock_request:
-        assert client.get_daily_calls_remaining() == (4321, 5000)
-
-    call_kwargs = mock_request.call_args.kwargs
-    assert mock_request.call_args.args[:2] == (
-        "GET",
-        "https://api.ebay.com/developer/analytics/v1_beta/rate_limit",
-    )
-    assert call_kwargs["params"] == {"api_name": "Buy"}
-    assert call_kwargs["headers"]["Authorization"] == "Bearer cached-token"
-
-
-def test_get_daily_calls_remaining_errors_when_daily_rate_is_missing():
-    client = EbayClient("id", "secret")
-    client._token = "cached-token"
-    client._token_expiry = 9_999_999_999
-    response = _mock_response(200, {"rateLimits": []})
-
-    with patch("ebay_bot.ebay_client.requests.request", return_value=response):
-        with pytest.raises(EbayApiError, match="Daily Browse API rate limit"):
-            client.get_daily_calls_remaining()
-
-
 def test_search_retries_on_5xx_then_succeeds():
     client = EbayClient("id", "secret")
     client._token = "cached-token"
@@ -132,18 +82,6 @@ def test_search_requests_shipping_options_field():
         client.search(keywords="mini pc")
 
     assert "shippingOptions" in mock_request.call_args.kwargs["params"]["fields"]
-
-
-def test_search_requests_maximum_page_size_for_price_monitoring():
-    client = EbayClient("id", "secret")
-    client._token = "cached-token"
-    client._token_expiry = 9_999_999_999
-
-    response = _mock_response(200, {"itemSummaries": []})
-    with patch("ebay_bot.ebay_client.requests.request", return_value=response) as mock_request:
-        client.search_watch(Watch(name="MiniPC", keywords="mini pc"))
-
-    assert mock_request.call_args.kwargs["params"]["limit"] == 200
 
 
 def test_search_sends_delivery_location_for_shipping_estimates():
