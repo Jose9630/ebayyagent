@@ -3,7 +3,7 @@
 Polls eBay's official **Browse API** for new listings matching criteria you define
 (keywords, price range, category, auction vs. Buy It Now), and notifies you on
 **Telegram** the moment a new one appears. You can also control it from Telegram
-itself with commands like `/status`, `/pause`, and `/addwatch`.
+itself with commands like `/status`, `/balance`, `/pause`, and `/addwatch`.
 
 It uses eBay's real API rather than scraping the website, so it won't get blocked
 and stays within eBay's terms of use.

@@ -7,6 +7,7 @@ import requests
 
 from ebay_bot.commands import BotState, handle_update, send_message
 from ebay_bot.config import AppConfig, Watch
+from ebay_bot.ebay_client import EbayApiError
 from ebay_bot.storage import SeenStore
 
 ALLOWED_CHAT = "111111"
@@ -67,6 +68,7 @@ def test_help_commands_send_html_safe_command_list(state, command):
         f"/{name}" in help_text
         for name in (
             "status",
+            "balance",
             "interval",
             "cycle",
             "zipcode",
@@ -78,6 +80,36 @@ def test_help_commands_send_html_safe_command_list(state, command):
             "removewatch",
         )
     )
+
+
+def test_balance_reports_daily_calls_remaining(state):
+    client = MagicMock()
+    client.get_daily_calls_remaining.return_value = (4321, 5000)
+
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/balance"), state, "tok", ALLOWED_CHAT, client)
+
+    client.get_daily_calls_remaining.assert_called_once_with()
+    assert "4,321" in mock_send.call_args.args[2]
+    assert "5,000" in mock_send.call_args.args[2]
+
+
+def test_balance_reports_unavailable_when_client_missing(state):
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/balance"), state, "tok", ALLOWED_CHAT)
+
+    assert "unavailable" in mock_send.call_args.args[2]
+
+
+def test_balance_reports_api_failure_without_exposing_error(state):
+    client = MagicMock()
+    client.get_daily_calls_remaining.side_effect = EbayApiError("private API detail")
+
+    with patch("ebay_bot.commands.send_message") as mock_send:
+        handle_update(make_update("/balance"), state, "tok", ALLOWED_CHAT, client)
+
+    assert "couldn't retrieve" in mock_send.call_args.args[2].lower()
+    assert "private API detail" not in mock_send.call_args.args[2]
 
 
 def test_interval_reports_current_value(state):
